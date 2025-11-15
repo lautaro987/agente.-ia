@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PCU-IA — Architect AI (Mejorado)</title>
+
+  <!-- Small UI reset + fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0b1220;--surface:#0f1724;--muted:#94a3b8;--accent:#6366f1;--success:#10b981;--danger:#ef4444;
+      --glass: rgba(255,255,255,0.03);
+    }
+    *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+    body{margin:0;background:linear-gradient(180deg,#071025 0%,var(--bg) 100%);color:#e6eef8;height:100vh;overflow:hidden}
+    .app{display:flex;height:100vh}
+    .sidebar{width:260px;background:var(--surface);padding:18px;border-right:1px solid rgba(255,255,255,0.03);}
+    .logo{font-weight:700;color:var(--accent);font-size:1.3rem;margin-bottom:14px}
+    .nav{display:flex;flex-direction:column;gap:8px}
+    .nav button{appearance:none;border:0;background:transparent;color:#cbd5e1;padding:10px;border-radius:8px;text-align:left;cursor:pointer}
+    .nav button.active{background:linear-gradient(90deg, rgba(99,102,241,0.18), rgba(99,102,241,0.08));color:white}
+    .main{flex:1;display:flex;flex-direction:column}
+    .header{height:64px;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.02)}
+    .title{font-size:1.05rem;font-weight:600}
+    .content{padding:18px;overflow:auto;display:flex;gap:18px;height:calc(100vh - 64px)}
+    /* panels */
+    .left{width:520px;display:flex;flex-direction:column;gap:12px}
+    .panel{background:var(--glass);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
+    .editor{width:100%;height:360px;background:#071029;border-radius:8px;padding:12px;color:#dbeafe;font-family:monospace;font-size:13px;border:1px solid rgba(255,255,255,0.02);resize:none}
+    .row{display:flex;gap:8px;align-items:center}
+    .btn{background:var(--accent);border:0;color:white;padding:8px 12px;border-radius:8px;cursor:pointer}
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.03)}
+    .console{height:220px;background:#031026;border-radius:8px;padding:10px;overflow:auto;font-family:monospace;font-size:13px;border:1px solid rgba(255,255,255,0.03)}
+    .small{font-size:12px;color:var(--muted)}
+    .stretch{flex:1}
+    .right{flex:1;display:flex;flex-direction:column;gap:12px}
+    .viewer{flex:1;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:12px;display:flex;flex-direction:column}
+    .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .history-list{max-height:120px;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+    pre.note{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);overflow:auto}
+    .badge{background:rgba(255,255,255,0.04);padding:6px 8px;border-radius:999px;font-size:12px}
+    .notify{position:fixed;right:18px;bottom:18px;background:rgba(0,0,0,0.6);padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.04);color:white}
+    /* responsive */
+    @media (max-width:1000px){.sidebar{display:none}.left{width:100%}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar panel">
+      <div class="logo">PCU-IA — Architect</div>
+      <div class="small">Studio de creación autosuficiente</div>
+      <nav class="nav" style="margin-top:12px">
+        <button class="active" data-module="architect">🏗️ Architect AI</button>
+        <button data-module="analyzer">🔍 Analizador</button>
+        <button data-module="chat">💬 Chat</button>
+        <button data-module="office">📝 Office</button>
+        <button data-module="games">🎮 Juegos</button>
+      </nav>
+
+      <div style="margin-top:16px" class="panel small">
+        <div>Version: <span id="version-badge">—</span></div>
+        <div class="small" style="margin-top:8px">Atajos: <span class="badge">Ctrl+S guardar</span> <span class="badge">Ctrl+R actualizar</span></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="header panel">
+        <div class="title">Architect AI — Editor del Sistema</div>
+        <div>
+          <button id="btn-fullscreen" class="btn ghost">⤢ Pantalla</button>
+          <button id="btn-reload" class="btn" title="Forzar recarga">Recargar</button>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="left">
+          <div class="panel">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div><strong>Editor del Sistema</strong><div class="small">Escribí código JS que el sistema podrá ejecutar en caliente (hot-reload)</div></div>
+              <div class="small">Autosave: <span id="autosave-status">off</span></div>
+            </div>
+            <textarea id="code-editor" class="editor" spellcheck="false">// system.js - Aquí va el código del sistema.
+console.log('system.js inicial');</textarea>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button id="btn-save" class="btn">Guardar</button>
+              <button id="btn-save-local" class="btn ghost">Guardar local</button>
+              <button id="btn-load-local" class="btn ghost">Cargar local</button>
+              <button id="btn-inject" class="btn">Aplicar (hot reload)</button>
+              <button id="btn-update-server" class="btn">Publicar (server)</button>
+              <button id="btn-rollback" class="btn ghost" title="Restaurar última versión estable">Rollback</button>
+              <div class="stretch"></div>
+              <div class="small">Estado: <span id="system-status">Estable</span></div>
+            </div>
+            <div style="margin-top:8px" class="small">Consejo: usa sandbox para ejecutar código peligroso.</div>
+          </div>
+
+          <div class="panel">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div><strong>Historial local</strong></div>
+              <div class="small">Versiones guardadas</div>
+            </div>
+            <div class="history-list" id="local-history"></div>
+          </div>
+
+          <div class="panel">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div><strong>Consola integrada</strong></div>
+              <div class="small">Logs en vivo</div>
+            </div>
+            <div id="console" class="console"></div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button id="btn-clear-console" class="btn ghost">Limpiar</button>
+              <button id="btn-toggle-err" class="btn ghost">Ver solo errores</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="right">
+          <div class="viewer panel" id="viewer">
+            <div class="toolbar">
+              <button id="btn-run-sandbox" class="btn">Ejecutar en sandbox</button>
+              <button id="btn-stop-sandbox" class="btn ghost">Detener sandbox</button>
+              <div class="stretch"></div>
+              <div class="small">Última ejecución: <span id="last-run">—</span></div>
+            </div>
+            <div style="flex:1;display:flex;gap:12px">
+              <div style="flex:1;padding:8px;border-radius:8px;background:rgba(0,0,0,0.05)">
+                <div style="font-weight:600;margin-bottom:8px">Sandbox (iframe)</div>
+                <iframe id="sandbox-iframe" style="width:100%;height:100%;border-radius:8px;border:1px solid rgba(255,255,255,0.02)"></iframe>
+              </div>
+              <div style="width:320px;display:flex;flex-direction:column;gap:8px">
+                <div class="panel">
+                  <div style="display:flex;justify-content:space-between"><strong>Server / Version</strong><button id="btn-refresh-version" class="btn ghost">Actualizar</button></div>
+                  <pre id="server-meta" class="note">Cargando...</pre>
+                </div>
+                <div class="panel">
+                  <div style="display:flex;justify-content:space-between"><strong>Backups</strong><button id="btn-list-history" class="btn ghost">Listar</button></div>
+                  <div id="server-history" style="max-height:120px;overflow:auto"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px">
+            <div style="flex:1" class="panel small">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div><strong>Auto-update</strong><div class="small">Si server.version != client.version, recarga</div></div>
+                <div>Check cada <input id="check-interval" type="number" value="5000" style="width:80px"/> ms</div>
+              </div>
+            </div>
+
+            <div style="width:320px" class="panel small">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div><strong>Estado watchdog</strong><div id="watchdog-status" class="small">OK</div></div>
+                <div><strong id="last-error" class="small" style="color:var(--danger)"></strong></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="notify" class="notify" style="display:none"></div>
+
+  <script>
+  /* ---------------------------------------------------------------
+     Helpers / UI utilities
+  --------------------------------------------------------------- */
+  const $ = (s) => document.querySelector(s);
+  const $all = (s) => Array.from(document.querySelectorAll(s));
+  function notify(msg, t=3000){ const n = $("#notify"); n.textContent = msg; n.style.display="block"; setTimeout(()=>n.style.display="none", t); }
+
+  // Console capture helper
+  const consoleDiv = $("#console");
+  function logToConsole(txt, level="log"){
+    const el = document.createElement("div");
+    el.textContent = `[${new Date().toLocaleTimeString()}] ${txt}`;
+    el.style.color = level === "error" ? "#ff9999" : "#bcd";
+    consoleDiv.appendChild(el);
+    consoleDiv.scrollTop = consoleDiv.scrollHeight;
+  }
+  // Override console.log/error locally to mirror logs (but keep original)
+  const _log = console.log.bind(console);
+  const _err = console.error.bind(console);
+  console.log = function(...a){ _log(...a); logToConsole(a.map(String).join(" "), "log"); };
+  console.error = function(...a){ _err(...a); logToConsole(a.map(String).join(" "), "error"); };
+
+  /* ---------------------------------------------------------------
+     Local persistence: autosave, local history
+  --------------------------------------------------------------- */
+  const editor = $("#code-editor");
+  const autosaveStatus = $("#autosave-status");
+  const localHistoryEl = $("#local-history");
+  let autosaveInterval = null;
+  let autosaveEnabled = true;
+
+  function saveLocalDraft(note = "") {
+    const code = editor.value;
+    const timestamp = Date.now();
+    const entry = { id: timestamp, time: new Date().toISOString(), code, note };
+    // read list
+    const list = JSON.parse(localStorage.getItem("pcu-history") || "[]");
+    list.unshift(entry);
+    // keep last 30
+    const truncated = list.slice(0, 30);
+    localStorage.setItem("pcu-history", JSON.stringify(truncated));
+    renderLocalHistory();
+    notify("Guardado local ✔");
+    return entry;
+  }
+
+  function renderLocalHistory(){
+    const list = JSON.parse(localStorage.getItem("pcu-history") || "[]");
+    localHistoryEl.innerHTML = "";
+    for (const item of list) {
+      const el = document.createElement("div");
+      el.style.display="flex"; el.style.justifyContent="space-between"; el.style.alignItems="center";
+      el.innerHTML = `<div style="font-size:12px">${new Date(item.time).toLocaleString()} <div class="small">${item.note || ""}</div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn ghost" data-load="${item.id}">Cargar</button>
+          <button class="btn ghost" data-del="${item.id}">Eliminar</button>
+        </div>`;
+      localHistoryEl.appendChild(el);
+    }
+    // attach events
+    $all('[data-load]').forEach(b => b.onclick = () => {
+      const id = b.getAttribute("data-load");
+      const list = JSON.parse(localStorage.getItem("pcu-history") || "[]");
+      const it = list.find(x => String(x.id) === String(id));
+      if (it) { editor.value = it.code; notify("Versión cargada local"); }
+    });
+    $all('[data-del]').forEach(b => b.onclick = () => {
+      const id = b.getAttribute("data-del");
+      let list = JSON.parse(localStorage.getItem("pcu-history") || "[]");
+      list = list.filter(x => String(x.id) !== String(id));
+      localStorage.setItem("pcu-history", JSON.stringify(list));
+      renderLocalHistory();
+      notify("Eliminado");
+    });
+  }
+
+  // Autosave every X ms
+  function startAutosave(ms = 2000){
+    if (autosaveInterval) clearInterval(autosaveInterval);
+    autosaveInterval = setInterval(()=> {
+      saveLocalDraft("autosave");
+      autosaveStatus.textContent = "on";
+    }, ms);
+    autosaveEnabled = true;
+    autosaveStatus.textContent = "on";
+  }
+  function stopAutosave(){
+    clearInterval(autosaveInterval); autosaveInterval = null; autosaveEnabled = false; autosaveStatus.textContent = "off";
+  }
+  startAutosave(2000); // default autosave 2s
+  renderLocalHistory();
+
+  /* ---------------------------------------------------------------
+     Shortcuts (Ctrl+S, Ctrl+R)
+  --------------------------------------------------------------- */
+  window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      $("#btn-save").click();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r") {
+      e.preventDefault();
+      $("#btn-inject").click();
+    }
+  });
+
+  /* ---------------------------------------------------------------
+     Server interactions: version polling and update/rollback
+  --------------------------------------------------------------- */
+  let clientVersion = null;
+  async function fetchVersion(){
+    try {
+      const r = await fetch("/api/version");
+      const j = await r.json();
+      $("#version-badge").textContent = j.version;
+      return j.version;
+    } catch (e) {
+      console.error("Error fetching version", e);
+      return null;
+    }
+  }
+
+  async function pollVersionCheck(interval=5000){
+    clientVersion = await fetchVersion();
+    setInterval(async () => {
+      try {
+        const serverV = await fetchVersion();
+        if (serverV && clientVersion && serverV !== clientVersion) {
+          console.log("Server version changed:", serverV, clientVersion);
+          notify("Nueva versión detectada. Recargando...");
+          location.reload();
+        }
+      } catch (e) {}
+    }, interval);
+  }
+  // Start with default interval value from input
+  pollVersionCheck(Number($("#check-interval").value) || 5000);
+  $("#check-interval").addEventListener("change", (e) => {
+    location.reload(); // quick re-init with new interval
+  });
+
+  // update server (publish)
+  async function publishToServer(note="manual publish"){
+    const code = editor.value;
+    try {
+      const r = await fetch("/api/update-system", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ code, note })
+      });
+      const j = await r.json();
+      if (j.ok) {
+        notify("Publicado en server ✔");
+        clientVersion = j.version;
+        $("#version-badge").textContent = j.version;
+      } else {
+        notify("Error publicando");
+        console.error(j);
+      }
+      return j;
+    } catch (e) {
+      console.error(e);
+      notify("Error de red");
+      return { ok:false, error:e.message };
+    }
+  }
+
+  // rollback
+  async function rollbackServer(){
+    const r = await fetch("/api/rollback", { method:"POST" });
+    const j = await r.json();
+    if (j.ok) { notify("Rollback ok"); location.reload(); }
+    else { notify("Rollback failed"); console.error(j); }
+  }
+
+  /* ---------------------------------------------------------------
+     Hot reload / Inject system.js in page without full reload
+     + Watchdog to revert if errors happen
+  --------------------------------------------------------------- */
+  let currentInjectedScript = null;
+  let lastStableCode = null;
+  let watchdogTimer = null;
+
+  function injectSystemScriptFromServer() {
+    // Add script tag that loads /system.js?cache=ts to bypass cache
+    const ts = Date.now();
+    if (currentInjectedScript) currentInjectedScript.remove();
+    const script = document.createElement("script");
+    script.src = "/system.js?cache=" + ts;
+    script.id = "injected-system";
+    document.body.appendChild(script);
+    currentInjectedScript = script;
+    console.log("Injected system.js", script.src);
+  }
+
+  // Hot-inject code directly from editor (client-side)
+  function hotInjectFromEditor() {
+    const code = editor.value;
+    // Save last stable
+    if (!lastStableCode) lastStableCode = localStorage.getItem("last-stable-code") || editor.value;
+    try {
+      // remove old if exists
+      if (currentInjectedScript) currentInjectedScript.remove();
+
+      // create blob + script
+      const blob = new Blob([code], { type: "text/javascript" });
+      const url = URL.createObjectURL(blob);
+
+      const script = document.createElement("script");
+      script.src = url;
+      script.id = "injected-system";
+      document.body.appendChild(script);
+      currentInjectedScript = script;
+
+      // start watchdog: if uncaught error occurs within X ms -> rollback to last stable
+      watchdogStart();
+      notify("Inyectado en caliente (hot reload)");
+      localStorage.setItem("last-stable-code", code);
+      $("#system-status").textContent = "Estable (injected)";
+    } catch (e) {
+      console.error("Error injecting code:", e);
+      notify("Error inyectando código");
+    }
+  }
+
+  // Watchdog: monitor global errors for N seconds after injection
+  function watchdogStart(timeout=8000) {
+    $("#watchdog-status").textContent = "Monitoreando";
+    if (watchdogTimer) clearTimeout(watchdogTimer);
+    // create error listener
+    function onErrWin(ev) {
+      console.error("Watchdog detected error:", ev.message || ev);
+      $("#watchdog-status").textContent = "Error detectado";
+      $("#last-error").textContent = ev.message || "error";
+      // rollback to last stable
+      performLocalRollback();
+      window.removeEventListener("error", onErrWin);
+    }
+    window.addEventListener("error", onErrWin);
+
+    watchdogTimer = setTimeout(() => {
+      $("#watchdog-status").textContent = "OK";
+      window.removeEventListener("error", onErrWin);
+    }, timeout);
+  }
+
+  function performLocalRollback(){
+    const stable = localStorage.getItem("last-stable-code");
+    if (stable) {
+      editor.value = stable;
+      hotInjectFromEditor();
+      notify("Se restauró la última versión estable (local rollback)");
+      $("#system-status").textContent = "Rollback aplicado";
+    } else {
+      notify("No hay versión estable local");
+    }
+  }
+
+  /* ---------------------------------------------------------------
+     Sandboxed execution via iframe + messaging
+  --------------------------------------------------------------- */
+  const iframe = $("#sandbox-iframe");
+  // prepare blank sandbox HTML
+  const sandboxHtml = () => `
+    <!doctype html>
+    <html><head><meta charset="utf-8"><title>Sandbox</title></head><body>
+    <div id="app"></div>
+    <script>
+      // Capture console and forward to parent
+      (function(){
+        const post = (t, d) => parent.postMessage({type:t, data:d}, "*");
+        ["log","error","warn","info"].forEach(k => {
+          const orig = console[k];
+          console[k] = function(...args){ post("console", { level:k, args }); orig.apply(console, args); };
+        });
+        window.addEventListener("message", async (ev) => {
+          if(!ev.data) return;
+          if(ev.data.type === "run") {
+            try {
+              // Run code
+              const fn = new Function(ev.data.code);
+              const res = fn();
+              post("done", { ok:true });
+            } catch (e) {
+              post("error", { message: e.message, stack: e.stack });
+            }
+          }
+        }, false);
+      })();
+    <\/script>
+    </body></html>
+  `;
+
+  function startSandbox(){
+    const blob = new Blob([sandboxHtml()], {type:"text/html"});
+    const url = URL.createObjectURL(blob);
+    iframe.src = url;
+    notify("Sandbox iniciado");
+  }
+
+  function stopSandbox(){
+    iframe.src = "about:blank";
+    notify("Sandbox detenido");
+  }
+
+  // Send run message to iframe
+  function runInSandbox(code){
+    if (!iframe.contentWindow) { notify("Sandbox no listo"); return; }
+    iframe.contentWindow.postMessage({ type: "run", code }, "*");
+    $("#last-run").textContent = new Date().toLocaleTimeString();
+  }
+
+  // Listen messages from iframe
+  window.addEventListener("message", (ev) => {
+    const d = ev.data;
+    if (!d || !d.type) return;
+    if (d.type === "console") {
+      const { level, args } = d.data;
+      logToConsole("[sandbox] " + args.join(" "), level === "error" ? "error" : "log");
+    } else if (d.type === "error") {
+      logToConsole("[sandbox error] " + (d.data.message || ""), "error");
+      notify("Error en sandbox: " + (d.data.message || ""));
+    } else if (d.type === "done") {
+      notify("Sandbox: ejecución finalizada");
+    }
+  });
+
+  /* ---------------------------------------------------------------
+     UI wiring: buttons
+  --------------------------------------------------------------- */
+  $("#btn-save").onclick = () => {
+    saveLocalDraft("manual save");
+  };
+  $("#btn-save-local").onclick = () => {
+    saveLocalDraft("manual local");
+  };
+  $("#btn-load-local").onclick = () => {
+    const list = JSON.parse(localStorage.getItem("pcu-history")||"[]");
+    if (list.length) { editor.value = list[0].code; notify("Cargado último local"); }
+    else notify("No hay local saves");
+  };
+  $("#btn-inject").onclick = () => {
+    hotInjectFromEditor();
+  };
+  $("#btn-update-server").onclick = async () => {
+    const res = await publishToServer("published via UI");
+    if (res.ok) {
+      injectSystemScriptFromServer(); // refresh script from server
+      notify("Publicado y recargado desde server");
+    } else notify("Error publicando");
+  };
+  $("#btn-rollback").onclick = () => {
+    if (confirm("¿Restaurar la última versión de backup en server?")) rollbackServer();
+  };
+
+  $("#btn-run-sandbox").onclick = () => {
+    startSandbox();
+    setTimeout(()=> runInSandbox(editor.value), 300); // run after iframe loads
+  };
+  $("#btn-stop-sandbox").onclick = () => stopSandbox();
+  $("#btn-clear-console").onclick = () => { consoleDiv.innerHTML = ""; };
+  $("#btn-refresh-version").onclick = async () => {
+    const r = await fetch("/api/version"); const j = await r.json();
+    $("#server-meta").textContent = JSON.stringify(j, null, 2);
+    $("#version-badge").textContent = j.version;
+    notify("Version refresh");
+  };
+  $("#btn-list-history").onclick = async () => {
+    const r = await fetch("/api/history"); const j = await r.json();
+    const el = $("#server-history"); el.innerHTML = "";
+    if (j.backups?.length) {
+      for (const b of j.backups) {
+        const node = document.createElement("div");
+        node.style.display="flex"; node.style.justifyContent="space-between"; node.style.alignItems="center";
+        node.innerHTML = `<div style="font-size:12px">${b.file}</div><div><button class="btn ghost" data-restore="${b.file}">Restaurar</button></div>`;
+        el.appendChild(node);
+      }
+      // attach restore events
+      $all('[data-restore]').forEach(b => {
+        b.onclick = async () => {
+          if (!confirm("Restaurar backup en server?")) return;
+          // Copy backup content to system.js via client (we don't have API for arbitrary backup restore), so warn user.
+          notify("Pedir a dev para restaurar manualmente (backend)");
+        };
+      });
+    } else el.textContent = "No backups";
+    notify("Historial listado");
+  };
+
+  $("#btn-reload").onclick = ()=> location.reload();
+  $("#btn-fullscreen").onclick = ()=> {
+    const el = document.documentElement;
+    if (!document.fullscreenElement) el.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  };
+
+  // init: fetch server version & inject current system.js (if any)
+  (async function init(){
+    // load server meta
+    try {
+      const r = await fetch("/api/version"); const j = await r.json();
+      $("#server-meta").textContent = JSON.stringify(j, null, 2);
+      $("#version-badge").textContent = j.version;
+      clientVersion = j.version;
+    } catch(e){
+      console.error("no server meta", e);
+    }
+    // try to load server system script to page
+    try { injectSystemScriptFromServer(); } catch(e){ console.error(e); }
+  })();
+
+  // expose some functions for console debugging
+  window.pcu = {
+    saveLocalDraft, renderLocalHistory, hotInjectFromEditor, performLocalRollback, publishToServer, injectSystemScriptFromServer
+  };
+
+  </script>
+</body>
+</html>
+
